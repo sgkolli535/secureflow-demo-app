@@ -6,7 +6,8 @@ automated security remediation pipeline with CodeQL + Devin.
 
 import os
 import sqlite3
-from flask import Flask, request, jsonify, send_file
+import subprocess
+from flask import Flask, request, jsonify, send_file, abort
 
 app = Flask(__name__)
 
@@ -82,29 +83,50 @@ def greet():
 # --- CWE-22: Path Traversal ---
 @app.route("/files/<path:filename>")
 def get_file(filename):
-    file_path = os.path.join("/data/reports", filename)
+    base_dir = os.path.realpath("/data/reports")
+    file_path = os.path.realpath(os.path.join(base_dir, filename))
+    if not file_path.startswith(base_dir + os.sep) and file_path != base_dir:
+        abort(403)
     return send_file(file_path)
 
 
 @app.route("/download")
 def download():
     doc = request.args.get("doc", "")
-    return send_file(os.path.join("/data/documents", doc))
+    base_dir = os.path.realpath("/data/documents")
+    file_path = os.path.realpath(os.path.join(base_dir, doc))
+    if not file_path.startswith(base_dir + os.sep) and file_path != base_dir:
+        abort(403)
+    return send_file(file_path)
 
 
 # --- CWE-78: Command Injection ---
 @app.route("/ping")
 def ping():
     host = request.args.get("host", "")
-    result = os.popen(f"ping -c 1 {host}").read()
-    return f"<pre>{result}</pre>"
+    try:
+        result = subprocess.run(
+            ["ping", "-c", "1", host],
+            capture_output=True, text=True, timeout=10
+        )
+        output = result.stdout
+    except subprocess.TimeoutExpired:
+        output = "Request timed out"
+    return f"<pre>{output}</pre>"
 
 
 @app.route("/dns")
 def dns_lookup():
     domain = request.args.get("domain", "")
-    result = os.popen("nslookup " + domain).read()
-    return jsonify({"result": result})
+    try:
+        result = subprocess.run(
+            ["nslookup", domain],
+            capture_output=True, text=True, timeout=10
+        )
+        output = result.stdout
+    except subprocess.TimeoutExpired:
+        output = "Request timed out"
+    return jsonify({"result": output})
 
 
 # --- CWE-20: Missing Input Validation ---
@@ -140,4 +162,4 @@ def set_role():
 
 if __name__ == "__main__":
     init_db()
-    app.run(debug=True, port=5001)
+    app.run(debug=False, port=5001)
