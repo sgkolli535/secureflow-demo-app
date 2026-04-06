@@ -6,6 +6,7 @@ automated security remediation pipeline with CodeQL + Devin.
 
 import os
 import sqlite3
+from markupsafe import escape
 from flask import Flask, request, jsonify, send_file
 
 app = Flask(__name__)
@@ -48,8 +49,7 @@ def index():
 def get_user():
     username = request.args.get("username", "")
     conn = get_db()
-    query = f"SELECT * FROM users WHERE username = '{username}'"
-    cursor = conn.execute(query)
+    cursor = conn.execute("SELECT * FROM users WHERE username = ?", (username,))
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
     return jsonify(rows)
@@ -59,8 +59,7 @@ def get_user():
 def search_users():
     role = request.args.get("role", "")
     conn = get_db()
-    query = "SELECT * FROM users WHERE role = '" + role + "'"
-    cursor = conn.execute(query)
+    cursor = conn.execute("SELECT * FROM users WHERE role = ?", (role,))
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
     return jsonify(rows)
@@ -70,13 +69,13 @@ def search_users():
 @app.route("/search")
 def search():
     q = request.args.get("q", "")
-    return f"<h1>Search Results for: {q}</h1><p>No results found.</p>"
+    return f"<h1>Search Results for: {escape(q)}</h1><p>No results found.</p>"
 
 
 @app.route("/greet")
 def greet():
     name = request.args.get("name", "Guest")
-    return f"<html><body><h2>Welcome, {name}!</h2></body></html>"
+    return f"<html><body><h2>Welcome, {escape(name)}!</h2></body></html>"
 
 
 # --- CWE-22: Path Traversal ---
@@ -132,7 +131,7 @@ def set_role():
     user_id = data.get("user_id")
     role = data.get("role")
     conn = get_db()
-    conn.execute(f"UPDATE users SET role = '{role}' WHERE id = {user_id}")
+    conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
     conn.commit()
     conn.close()
     return jsonify({"status": "updated"})
